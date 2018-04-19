@@ -3,7 +3,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Threading;
 using SharpCompress.Archives;
 using SharpCompress.Archives.SevenZip;
 using SharpCompress.Readers;
@@ -39,10 +38,13 @@ namespace RPCS3Updater
 
             //+2 to get rid of dash and 'v'
 
+            
+            /*
 
             Console.WriteLine("DEBUG:\n");
             Console.WriteLine("configPath: " + configPath);
             Console.WriteLine("currentDirectory: " + currentDirectory);
+            
 
             /*Console.WriteLine("files: \n");
             //printing files in dir
@@ -118,6 +120,7 @@ namespace RPCS3Updater
                 }
 
                 File.WriteAllLines(configPath, writeMe);
+                Main(args);
             }
             else
             {
@@ -173,8 +176,8 @@ namespace RPCS3Updater
 
             String file = currentDirectory + "/" + result.Substring(s1, (e1 - s1) + 2);
             //file to download to (install directory + file name extracted from html)
-            clientDL.DownloadFile(result, file);
             Console.WriteLine("Downloading...");
+            clientDL.DownloadFile(result, file);
 
 
             //extract and overwrite
