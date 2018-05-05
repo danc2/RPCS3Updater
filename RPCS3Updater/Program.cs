@@ -15,18 +15,17 @@ namespace RPCS3Updater
         {
             //only execute in RPCS3 Folder
             String appdata = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            String confFolder = "RPCS3Updater";
-            String confFile = "options.conf";
-            String configPath = appdata + "/" + confFolder + "/" + confFile;
             String[] configOptions;
             String currentDirectory = System.IO.Directory.GetCurrentDirectory();
             String[] files = System.IO.Directory.GetFiles(currentDirectory);
             Boolean installed = false;
             Boolean updateNeeded = false;
             String currentVersion;
-
+            String[] nodashArgs = new String[args.Length];
             long currentVerInt = 0;
             long newVerInt;
+            Boolean updateArg = false;
+            Boolean noLaunch = false;
 
             String downloadUrl = getDownloadUrl();
             int firstDash = downloadUrl.IndexOf("-");
@@ -36,9 +35,36 @@ namespace RPCS3Updater
 
             newVerInt = Convert.ToInt64(newVersion.Replace(".", "").Replace("-", ""));
 
+            for (int i = 0; i < args.Length; i++)
+            {
+                nodashArgs[i] = args[i].Replace("-", "");
+            }
+
+            for (int i = 0; i < nodashArgs.Length; i++)
+            {
+                String sanitizedArg = nodashArgs[i].ToLower().Trim();
+                if (sanitizedArg.Contains("y"))
+                {
+                    updateArg = true;
+                }
+
+                if (sanitizedArg.Contains("nolaunch"))
+                {
+                    noLaunch = true;
+                }
+
+                if (sanitizedArg.Contains("h"))
+                {
+                    Console.WriteLine("Usage: -y to autoupdate, -h to print this statement," +
+                                      " -nolaunch to disable autolaunching behavior when an update isn't needed");
+                    Environment.Exit(0);
+                }
+                   
+            }
+
             //+2 to get rid of dash and 'v'
 
-            
+
             /*
 
             Console.WriteLine("DEBUG:\n");
@@ -62,6 +88,7 @@ namespace RPCS3Updater
                     installed = true;
                     if (File.Exists("RPCS3.log"))
                     {
+                        //read log file to get current version information
                         currentVersion = File.ReadLines("RPCS3.log").First().Trim();
                         int startIndex = currentVersion.IndexOf("v");
                         int lastDashIndex = currentVersion.LastIndexOf("-");
@@ -91,59 +118,45 @@ namespace RPCS3Updater
 
             if (currentVerInt < newVerInt)
             {
-                Console.WriteLine("Would you like to update? \ny or n");
-                String ans=Console.ReadLine();
-                if (ans.Contains("y"))
+                String ans = "";
+                if (!updateArg)
+                {
+                    //only prompt user if -y wasn't specified
+                    Console.WriteLine("Would you like to update? \ny or n");
+                    ans = Console.ReadLine();
+                }
+
+                if (ans.Contains("y") || updateArg)
                 {
                     updateNeeded = true;
                 }
             }
 
-            if (!File.Exists((configPath)))
+
+            if (updateNeeded)
             {
-                //File.Create(configPath);
-                //file not found
-                Directory.CreateDirectory(appdata + "/" + confFolder);
-                Console.WriteLine("You need to configure RPCS3 Updater.");
-                Console.WriteLine("Would you like to use development versions of RPCS3?\n y or n");
-                Console.WriteLine("Note: this currently doesn't apply");
-                String[] writeMe = new String[2];
-                String ans = Console.ReadLine();
-
-                if (ans.Equals("y"))
-                {
-                    writeMe[0] = "dev=true";
-                }
-                else
-                {
-                    writeMe[0] = "dev=false";
-                }
-
-                File.WriteAllLines(configPath, writeMe);
-                Main(args);
+                //do dev update
+                doUpdate(currentDirectory, downloadUrl);
             }
             else
             {
-                configOptions = File.ReadAllLines(configPath);
-                if (configOptions[0].Equals("dev=true") && updateNeeded)
-                {
-                    //do dev update
-                    doUpdate(currentDirectory, downloadUrl);
-                }
-                else if (updateNeeded)
-                {
-                    doUpdate(currentDirectory, downloadUrl);
-                    //do regular update
-                }
-                else
-                {
-                    Console.WriteLine("No update needed!");
-                    Environment.Exit(0);
-                }
+                Console.WriteLine("No update needed!");
             }
+
+            if (!noLaunch || (currentVerInt < newVerInt))
+            {
+                Console.WriteLine("Starting RPCS3...");
+                //to force log file to be updated and launch
+                ProcessStartInfo rpcs3 = new ProcessStartInfo(@"rpcs3.exe");
+                Process.Start(rpcs3);
+
+            }
+         
+            Environment.Exit(0);
         }
 
-        public static String getDownloadUrl()
+
+        private static String getDownloadUrl()
         {
             var handler = new System.Net.Http.HttpClientHandler();
             handler.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
@@ -163,7 +176,7 @@ namespace RPCS3Updater
         }
 
 
-        public static void doUpdate(String currentDirectory, String result)
+        private static void doUpdate(String currentDirectory, String result)
         {
             int start = result.IndexOf("https://ci.");
             int end = result.IndexOf("7z");
@@ -193,13 +206,8 @@ namespace RPCS3Updater
                     });
                 }
             }
-           Console.WriteLine("Starting RPCS3...");
-            
-           ProcessStartInfo rpcs3 = new ProcessStartInfo(@"rpcs3.exe");
-           Process.Start(rpcs3);
-           
-           System.IO.File.Delete(file);
-           Console.WriteLine("Done!");
+            System.IO.File.Delete(file);
+            Console.WriteLine("Done!");
         }
     }
 }
