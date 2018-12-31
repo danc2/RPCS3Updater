@@ -7,8 +7,9 @@
 .idea/**/dictionaries
 .idea/**/shelf
 
-.idea/**/indexLayout.xml
-.idea/**/contentModel.xml
+.idea/.idea.RPCS3Updater/.idea/indexLayout.xml
+.idea/.idea.RPCS3Updater/.idea/contentModel.xml
+
 
 # Sensitive or high-churn files
 .idea/**/dataSources/
