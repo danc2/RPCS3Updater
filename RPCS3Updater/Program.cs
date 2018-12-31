@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
+using Newtonsoft.Json.Linq;
 using SharpCompress.Archives;
 using SharpCompress.Archives.SevenZip;
 using SharpCompress.Readers;
@@ -14,26 +15,21 @@ namespace RPCS3Updater
         public static void Main(string[] args)
         {
             //only execute in RPCS3 Folder
-            String appdata = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            String[] configOptions;
             String currentDirectory = System.IO.Directory.GetCurrentDirectory();
-            String[] files = System.IO.Directory.GetFiles(currentDirectory);
+            String[] currentFileNames = System.IO.Directory.GetFiles(currentDirectory);
             Boolean installed = false;
             Boolean updateNeeded = false;
-            String currentVersion;
             String[] nodashArgs = new String[args.Length];
             long currentVerInt = 0;
-            long newVerInt;
             Boolean updateArg = false;
             Boolean noLaunch = false;
+            
 
-            String downloadUrl = getDownloadUrl();
-            int firstDash = downloadUrl.IndexOf("-");
-            int lastDash = downloadUrl.LastIndexOf("-");
 
-            String newVersion = downloadUrl.Substring(firstDash + 2, (lastDash - firstDash) - 2);
+            String newVersion = getDownloadVersion();
+            String downloadURL = getDownloadUrl();
 
-            newVerInt = Convert.ToInt64(newVersion.Replace(".", "").Replace("-", ""));
+            long newVerInt = Convert.ToInt64(newVersion.Replace(".", "").Replace("-", ""));
 
             for (int i = 0; i < args.Length; i++)
             {
@@ -43,70 +39,47 @@ namespace RPCS3Updater
             for (int i = 0; i < nodashArgs.Length; i++)
             {
                 String sanitizedArg = nodashArgs[i].ToLower().Trim();
-                if (sanitizedArg.Contains("y"))
+                switch (sanitizedArg)
                 {
-                    updateArg = true;
+                    case "y":
+                        updateArg = true;
+                        break;
+                    case "nolaunch":
+                        noLaunch = true;
+                        break;
+                    case "h":
+                        Console.WriteLine("Usage: -y to autoupdate, -h to print this statement," +
+                                          " -nolaunch to disable autolaunching behavior when an update isn't needed");
+                        Environment.Exit(0);
+                        break;
+                    default:
+                        Environment.Exit(1);
+                        break;
                 }
-
-                if (sanitizedArg.Contains("nolaunch"))
-                {
-                    noLaunch = true;
-                }
-
-                if (sanitizedArg.Contains("h"))
-                {
-                    Console.WriteLine("Usage: -y to autoupdate, -h to print this statement," +
-                                      " -nolaunch to disable autolaunching behavior when an update isn't needed");
-                    Environment.Exit(0);
-                }
-                   
             }
 
-            //+2 to get rid of dash and 'v'
-
-
-            /*
-
-            Console.WriteLine("DEBUG:\n");
-            Console.WriteLine("configPath: " + configPath);
-            Console.WriteLine("currentDirectory: " + currentDirectory);
-            
-
-            /*Console.WriteLine("files: \n");
-            //printing files in dir
-            foreach(var item in files)
+            //for loop ----> LINQ expression
+            if (currentFileNames.Any(currentFileName => currentFileName.Contains("rpcs3.exe")))
             {
-                Console.WriteLine(item.ToString());
-            }
-            */
-
-
-            foreach (var t in files)
-            {
-                if (t.Contains("rpcs3.exe"))
+                installed = true;
+                if (File.Exists("RPCS3.log"))
                 {
-                    installed = true;
-                    if (File.Exists("RPCS3.log"))
-                    {
-                        //read log file to get current version information
-                        currentVersion = File.ReadLines("RPCS3.log").First().Trim();
-                        int startIndex = currentVersion.IndexOf("v");
-                        int lastDashIndex = currentVersion.LastIndexOf("-");
-                        currentVersion = currentVersion.Substring(startIndex + 1, (lastDashIndex - startIndex) - 1);
+                    //read log file to get current version information
+                    String currentVersion = File.ReadLines("RPCS3.log").First().Trim();
+                    int startIndex = currentVersion.IndexOf("v");
+                    int lastDashIndex = currentVersion.LastIndexOf("-");
+                    currentVersion = currentVersion.Substring(startIndex + 1, (lastDashIndex - startIndex) - 1);
 
-                        currentVerInt = Convert.ToInt64(currentVersion.Replace(".", "").Replace("-", ""));
+                    currentVerInt = Convert.ToInt64(currentVersion.Replace(".", "").Replace("-", ""));
 
-                        Console.WriteLine("Current Version: " + currentVersion);
-                        Console.WriteLine("New Version: " + newVersion);
-                    }
-                    else
-                    {
-                        Console.WriteLine("Current Version Unknown");
-                        Console.WriteLine("New Version: " + newVersion);
-                        currentVerInt = -1;
-                    }
-
-                    break;
+                    Console.WriteLine("Current Version: " + currentVersion);
+                    Console.WriteLine("New Version: " + newVersion);
+                }
+                else
+                {
+                    Console.WriteLine("Current Version Unknown");
+                    Console.WriteLine("New Version: " + newVersion);
+                    currentVerInt = -1;
                 }
             }
 
@@ -136,7 +109,8 @@ namespace RPCS3Updater
             if (updateNeeded)
             {
                 //do dev update
-                doUpdate(currentDirectory, downloadUrl);
+                String fileName = newVersion + ".7z";
+                doUpdate(currentDirectory, fileName, downloadURL);
             }
             else
             {
@@ -149,48 +123,46 @@ namespace RPCS3Updater
                 //to force log file to be updated and launch
                 ProcessStartInfo rpcs3 = new ProcessStartInfo(@"rpcs3.exe");
                 Process.Start(rpcs3);
-
             }
-         
+
             Environment.Exit(0);
         }
 
-
-        private static String getDownloadUrl()
+        private static string getDownloadUrl()
         {
-            var handler = new System.Net.Http.HttpClientHandler();
-            handler.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
-            var client = new System.Net.Http.HttpClient(handler);
+            WebClient githubAPI = new WebClient();
+            githubAPI.Headers.Add ("user-agent", "Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.2; .NET CLR 1.0.3705;)");
+            Uri githubLink = new Uri("https://api.github.com/repos/rpcs3/rpcs3-binaries-win/releases/latest");
+            Stream stream = githubAPI.OpenRead(githubLink);
+            StreamReader reader = new StreamReader(stream);
+            String response = reader.ReadToEnd();
 
-            client.BaseAddress = new Uri("https://rpcs3.net/download");
-            System.Net.Http.HttpResponseMessage response = client.GetAsync("").Result;
-            response.EnsureSuccessStatusCode();
-            string result = response.Content.ReadAsStringAsync().Result;
-            //Console.WriteLine(result);
-
-            int start = result.IndexOf("https://ci.");
-            int end = result.IndexOf("7z");
-
-            result = result.Substring(start, (end - start) + 2);
-            return result;
+            JObject githubResponse = JObject.Parse(response);
+            String downloadURL = (string) githubResponse["assets"][0]["browser_download_url"];
+            return downloadURL.Trim().Normalize();
         }
 
-
-        private static void doUpdate(String currentDirectory, String result)
+        private static string getDownloadVersion()
         {
-            int start = result.IndexOf("https://ci.");
-            int end = result.IndexOf("7z");
+            WebClient githubAPI = new WebClient();
+            githubAPI.Headers.Add ("user-agent", "Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.2; .NET CLR 1.0.3705;)");
+            Uri githubLink = new Uri("https://api.github.com/repos/rpcs3/rpcs3-binaries-win/releases/latest");
+            Stream stream = githubAPI.OpenRead(githubLink);
+            StreamReader reader = new StreamReader(stream);
+            String response = reader.ReadToEnd();
 
-            result = result.Substring(start, (end - start) + 2);
+            JObject githubResponse = JObject.Parse(response);
+            String downloadVersion = (string) githubResponse["name"];
+            return downloadVersion.Trim().Normalize();
+        }
+
+        private static void doUpdate(String currentDirectory, String fileName, String downloadURL)
+        {
             WebClient clientDL = new WebClient();
-
-            int s1 = result.IndexOf("rpcs3");
-            int e1 = result.IndexOf("7z");
-
-            String file = currentDirectory + "/" + result.Substring(s1, (e1 - s1) + 2);
+            String file = currentDirectory + "/" + fileName;
             //file to download to (install directory + file name extracted from html)
             Console.WriteLine("Downloading...");
-            clientDL.DownloadFile(result, file);
+            clientDL.DownloadFile(downloadURL, file);
 
 
             //extract and overwrite
@@ -206,7 +178,8 @@ namespace RPCS3Updater
                     });
                 }
             }
-            System.IO.File.Delete(file);
+
+            File.Delete(file);
             Console.WriteLine("Done!");
         }
     }
