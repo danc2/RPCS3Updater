@@ -31,7 +31,7 @@ cmake-build-release/
 
 # IntelliJ
 out/
-bin/*
+RPCS3Updater/bin/
 
 # mpeltonen/sbt-idea plugin
 .idea_modules/
